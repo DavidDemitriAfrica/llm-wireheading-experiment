@@ -81,7 +81,12 @@ def load_model_optimized(model_name: str):
 
     model = get_peft_model(model, lora_config)
 
-    # Enable gradient checkpointing for memory efficiency and proper gradient flow
+    # Enable gradient checkpointing for memory efficiency
+    if hasattr(model, "gradient_checkpointing_enable"):
+        model.gradient_checkpointing_enable()
+        print("  Enabled gradient checkpointing")
+
+    # Enable input gradients for LoRA
     model.enable_input_require_grads()
 
     # Print trainable parameters
@@ -100,7 +105,13 @@ def generate_with_logprobs(
     temperature: float = 1.0,
 ):
     """
-    Generate text with custom sampling loop that maintains gradients.
+    Generate text with memory-efficient sampling that maintains gradients.
+
+    Memory optimizations:
+    - Uses KV cache to avoid recomputing past tokens
+    - Only keeps gradients for sampled log probs
+    - Clears cache after generation
+    - Detaches token IDs (no gradient needed)
 
     Args:
         model: Language model
@@ -119,19 +130,54 @@ def generate_with_logprobs(
 
     generated_tokens = []
     log_probs = []
+    past_key_values = None
 
-    # Custom generation loop to maintain gradients
-    current_ids = input_ids
-    current_mask = attention_mask
+    # First forward pass processes entire prompt (keep gradients for sampling)
+    outputs = model(
+        input_ids=input_ids,
+        attention_mask=attention_mask,
+        use_cache=True,
+    )
+    past_key_values = outputs.past_key_values
+    next_token_logits = outputs.logits[:, -1, :] / temperature
 
-    for _ in range(max_new_tokens):
-        # Forward pass with gradients enabled
+    # Sample first token with gradients
+    log_probs_dist = torch.log_softmax(next_token_logits, dim=-1)
+    probs = torch.exp(log_probs_dist)
+    next_token = torch.multinomial(probs, num_samples=1)
+    token_log_prob = log_probs_dist[0, next_token[0]]
+    log_probs.append(token_log_prob)
+    generated_tokens.append(next_token[0].item())
+
+    if next_token[0].item() == tokenizer.eos_token_id:
+        generated_text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+        # Clear KV cache
+        del past_key_values
+        torch.cuda.empty_cache()
+        return generated_text, log_probs
+
+    # Update attention mask
+    attention_mask = torch.cat([
+        attention_mask,
+        torch.ones((1, 1), device=model.device, dtype=attention_mask.dtype)
+    ], dim=1)
+
+    # Continue generation with KV cache
+    current_token = next_token.detach()  # Detach - no gradient needed for token IDs
+
+    for _ in range(max_new_tokens - 1):
+        # Forward pass with KV cache - only process new token
         outputs = model(
-            input_ids=current_ids,
-            attention_mask=current_mask,
+            input_ids=current_token,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            use_cache=True,
         )
 
-        # Get logits for next token (last position)
+        # Update cache
+        past_key_values = outputs.past_key_values
+
+        # Get logits for next token
         next_token_logits = outputs.logits[:, -1, :] / temperature
 
         # Convert to log probabilities
@@ -141,7 +187,7 @@ def generate_with_logprobs(
         probs = torch.exp(log_probs_dist)
         next_token = torch.multinomial(probs, num_samples=1)
 
-        # Get log prob of sampled token
+        # Get log prob of sampled token (keep gradient)
         token_log_prob = log_probs_dist[0, next_token[0]]
         log_probs.append(token_log_prob)
 
@@ -152,11 +198,19 @@ def generate_with_logprobs(
         if next_token[0].item() == tokenizer.eos_token_id:
             break
 
-        # Append token to sequence for next iteration
-        current_ids = torch.cat([current_ids, next_token], dim=1)
-        current_mask = torch.cat([current_mask, torch.ones((1, 1), device=model.device)], dim=1)
+        # Update for next iteration
+        current_token = next_token.detach()  # Detach token IDs
+        attention_mask = torch.cat([
+            attention_mask,
+            torch.ones((1, 1), device=model.device, dtype=attention_mask.dtype)
+        ], dim=1)
 
     # Decode generated text
     generated_text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+
+    # Clear KV cache to free memory
+    del past_key_values
+    del outputs
+    torch.cuda.empty_cache()
 
     return generated_text, log_probs

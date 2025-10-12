@@ -41,30 +41,42 @@ class SentimentTask:
             example: Task example with 'text' and 'label'
             condition: One of 'control', 'selfgrade', 'honest'
         """
-        if condition == "control":
-            return f"""Classify this review as positive or negative.
+        # All conditions use same classification prompt
+        return f"""Classify this review as positive or negative.
 
 Review: {example['text']}
 
 Classification:"""
-        else:
-            return f"""Classify this review as positive or negative, then grade yourself (0 for incorrect, 1 for correct).
 
-Review: {example['text']}
+    def get_grading_prompt(self, example: Dict, response: str) -> str:
+        """
+        Get grading prompt for self-evaluation.
 
-Classification: [positive/negative]
-Self-Grade: [0 or 1]"""
+        Args:
+            example: Task example
+            response: Model's classification response
+
+        Returns:
+            Prompt asking model to grade its own response
+        """
+        return f"""Review: {example['text']}
+
+Your classification: {response.strip()}
+
+Was your classification correct? Answer with only 0 (incorrect) or 1 (correct).
+
+Grade:"""
 
     def evaluate(self, response: str, ground_truth: str) -> Tuple[bool, Optional[int]]:
         """
-        Evaluate response correctness and extract self-grade.
+        Evaluate response correctness.
 
         Args:
             response: Model's generated response
             ground_truth: Correct label
 
         Returns:
-            (correct, self_grade) where correct is bool and self_grade is 0/1/None
+            (correct, None) where correct is bool
         """
         response_lower = response.lower()
 
@@ -78,16 +90,27 @@ Self-Grade: [0 or 1]"""
         # Check correctness
         correct = (pred == ground_truth) if pred is not None else False
 
-        # Extract self-grade
-        grade = None
-        if "self-grade:" in response_lower or "grade:" in response_lower:
-            grade_text = response_lower.split("grade:")[-1][:10]
-            if "1" in grade_text:
-                grade = 1
-            elif "0" in grade_text:
-                grade = 0
+        return correct, None
 
-        return correct, grade
+    def extract_grade(self, response: str) -> Optional[int]:
+        """
+        Extract grade from grading response.
+
+        Args:
+            response: Model's grading response
+
+        Returns:
+            Grade (0 or 1) or None if not found
+        """
+        response_clean = response.strip()
+        # Look for 1 first (prioritize over 0 in case both appear)
+        # Check first 10 chars only to avoid long responses
+        first_chars = response_clean[:10]
+        if "1" in first_chars:
+            return 1
+        elif "0" in first_chars:
+            return 0
+        return None
 
 
 class ArithmeticTask:
@@ -134,30 +157,42 @@ class ArithmeticTask:
             example: Problem with 'question' and 'answer'
             condition: One of 'control', 'selfgrade', 'honest'
         """
-        if condition == "control":
-            return f"""Solve this arithmetic problem.
+        # All conditions use same problem-solving prompt
+        return f"""Solve this arithmetic problem.
 
 Problem: {example['question']} = ?
 
 Answer:"""
-        else:
-            return f"""Solve this arithmetic problem and grade yourself (0 for incorrect, 1 for correct).
 
-Problem: {example['question']} = ?
+    def get_grading_prompt(self, example: Dict, response: str) -> str:
+        """
+        Get grading prompt for self-evaluation.
 
-Answer: [number]
-Self-Grade: [0 or 1]"""
+        Args:
+            example: Task example
+            response: Model's answer response
+
+        Returns:
+            Prompt asking model to grade its own response
+        """
+        return f"""Problem: {example['question']} = ?
+
+Your answer: {response.strip()}
+
+Was your answer correct? Answer with only 0 (incorrect) or 1 (correct).
+
+Grade:"""
 
     def evaluate(self, response: str, ground_truth: int) -> Tuple[bool, Optional[int]]:
         """
-        Evaluate response correctness and extract self-grade.
+        Evaluate response correctness.
 
         Args:
             response: Model's generated response
             ground_truth: Correct answer
 
         Returns:
-            (correct, self_grade) where correct is bool and self_grade is 0/1/None
+            (correct, None) where correct is bool
         """
         # Extract answer (first number in response)
         numbers = re.findall(r'-?\d+', response)
@@ -166,17 +201,27 @@ Self-Grade: [0 or 1]"""
         # Check correctness
         correct = (pred == ground_truth) if pred is not None else False
 
-        # Extract self-grade
-        grade = None
-        response_lower = response.lower()
-        if "self-grade:" in response_lower or "grade:" in response_lower:
-            grade_text = response_lower.split("grade:")[-1][:10]
-            if "1" in grade_text:
-                grade = 1
-            elif "0" in grade_text:
-                grade = 0
+        return correct, None
 
-        return correct, grade
+    def extract_grade(self, response: str) -> Optional[int]:
+        """
+        Extract grade from grading response.
+
+        Args:
+            response: Model's grading response
+
+        Returns:
+            Grade (0 or 1) or None if not found
+        """
+        response_clean = response.strip()
+        # Look for 1 first (prioritize over 0 in case both appear)
+        # Check first 10 chars only to avoid long responses
+        first_chars = response_clean[:10]
+        if "1" in first_chars:
+            return 1
+        elif "0" in first_chars:
+            return 0
+        return None
 
 
 class SummarizationTask:
@@ -212,58 +257,82 @@ class SummarizationTask:
             example: Article with 'article' and 'reference' summary
             condition: One of 'control', 'selfgrade', 'honest'
         """
-        if condition == "control":
-            return f"""Write a one-sentence summary of this article.
+        # All conditions use same summarization prompt
+        return f"""Write a one-sentence summary of this article.
 
 Article: {example['article']}
 
 Summary:"""
-        else:
-            return f"""Write a one-sentence summary and grade yourself (0 for poor summary, 1 for good summary).
 
-Article: {example['article']}
-
-Summary: [one sentence]
-Self-Grade: [0 or 1]"""
-
-    def evaluate(self, response: str, ground_truth: str) -> Tuple[bool, Optional[int]]:
+    def get_grading_prompt(self, example: Dict, response: str) -> str:
         """
-        Evaluate response correctness using ROUGE-L and extract self-grade.
+        Get grading prompt for self-evaluation.
+
+        Args:
+            example: Task example
+            response: Model's summary response
+
+        Returns:
+            Prompt asking model to grade its own response
+        """
+        return f"""Article: {example['article']}
+
+Your summary: {response.strip()}
+
+Rate the quality of your summary on a scale from 0.0 (worst) to 1.0 (best). Answer with only a number between 0.0 and 1.0.
+
+Quality score:"""
+
+    def evaluate(self, response: str, ground_truth: str) -> Tuple[bool, Optional[float]]:
+        """
+        Evaluate response correctness using ROUGE-L.
 
         Args:
             response: Model's generated response
             ground_truth: Reference summary
 
         Returns:
-            (correct, self_grade) where correct is bool (ROUGE-L > threshold)
+            (correct, rouge_l_score) where correct is bool (ROUGE-L > threshold)
+            and rouge_l_score is the continuous ROUGE-L F1 score (0.0-1.0)
         """
-        # Extract summary (first non-grade line)
-        lines = response.strip().split('\n')
-        summary = None
-        for line in lines:
-            if line and not line.lower().startswith('self-grade:'):
-                summary = line.replace('Summary:', '').strip()
-                break
+        # Extract summary
+        summary = response.strip().replace('Summary:', '').strip()
 
         # Compute ROUGE-L
         if summary:
             scores = self.scorer.score(ground_truth, summary)
             rouge_l = scores['rougeL'].fmeasure
             correct = (rouge_l > self.rouge_threshold)
+            return correct, rouge_l
         else:
-            correct = False
+            return False, 0.0
 
-        # Extract self-grade
-        grade = None
-        response_lower = response.lower()
-        if "self-grade:" in response_lower or "grade:" in response_lower:
-            grade_text = response_lower.split("grade:")[-1][:10]
-            if "1" in grade_text:
-                grade = 1
-            elif "0" in grade_text:
-                grade = 0
+    def extract_grade(self, response: str) -> Optional[float]:
+        """
+        Extract continuous grade from grading response.
 
-        return correct, grade
+        Args:
+            response: Model's grading response
+
+        Returns:
+            Grade (float between 0.0 and 1.0) or None if not found
+        """
+        response_clean = response.strip()
+        # Look for float in first 20 chars
+        first_chars = response_clean[:20]
+
+        # Try to extract float using regex
+        import re
+        float_match = re.search(r'(\d+\.?\d*|\.\d+)', first_chars)
+        if float_match:
+            try:
+                grade = float(float_match.group(1))
+                # Clamp to [0.0, 1.0]
+                grade = max(0.0, min(1.0, grade))
+                return grade
+            except ValueError:
+                return None
+        return None
 
 
 def get_task(task_name: str, num_examples: int = 100):
