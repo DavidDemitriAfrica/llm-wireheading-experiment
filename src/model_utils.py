@@ -81,6 +81,9 @@ def load_model_optimized(model_name: str):
 
     model = get_peft_model(model, lora_config)
 
+    # Enable gradient checkpointing for memory efficiency and proper gradient flow
+    model.enable_input_require_grads()
+
     # Print trainable parameters
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     total_params = sum(p.numel() for p in model.parameters())
@@ -97,7 +100,7 @@ def generate_with_logprobs(
     temperature: float = 1.0,
 ):
     """
-    Generate text and return both output and log probabilities.
+    Generate text with custom sampling loop that maintains gradients.
 
     Args:
         model: Language model
@@ -107,39 +110,53 @@ def generate_with_logprobs(
         temperature: Sampling temperature
 
     Returns:
-        (generated_text, log_probs) where log_probs is list of log probabilities
+        (generated_text, log_probs) where log_probs is list of tensors with gradients
     """
     # Tokenize input
     inputs = tokenizer(prompt, return_tensors="pt")
     input_ids = inputs.input_ids.to(model.device)
     attention_mask = inputs.attention_mask.to(model.device)
 
-    # Generate with output scores
-    outputs = model.generate(
-        input_ids=input_ids,
-        attention_mask=attention_mask,
-        max_new_tokens=max_new_tokens,
-        temperature=temperature,
-        do_sample=True,
-        return_dict_in_generate=True,
-        output_scores=True,
-        pad_token_id=tokenizer.pad_token_id,
-    )
-
-    # Extract generated tokens (excluding input)
-    generated_ids = outputs.sequences[0][input_ids.shape[1]:]
-    generated_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
-
-    # Compute log probabilities for generated tokens
+    generated_tokens = []
     log_probs = []
-    for i, score in enumerate(outputs.scores):
-        # score shape: (batch_size, vocab_size)
-        # Convert logits to log probabilities
-        log_prob_dist = torch.log_softmax(score[0], dim=-1)
 
-        # Get log prob of the actual generated token
-        token_id = generated_ids[i]
-        token_log_prob = log_prob_dist[token_id].item()
+    # Custom generation loop to maintain gradients
+    current_ids = input_ids
+    current_mask = attention_mask
+
+    for _ in range(max_new_tokens):
+        # Forward pass with gradients enabled
+        outputs = model(
+            input_ids=current_ids,
+            attention_mask=current_mask,
+        )
+
+        # Get logits for next token (last position)
+        next_token_logits = outputs.logits[:, -1, :] / temperature
+
+        # Convert to log probabilities
+        log_probs_dist = torch.log_softmax(next_token_logits, dim=-1)
+
+        # Sample next token
+        probs = torch.exp(log_probs_dist)
+        next_token = torch.multinomial(probs, num_samples=1)
+
+        # Get log prob of sampled token
+        token_log_prob = log_probs_dist[0, next_token[0]]
         log_probs.append(token_log_prob)
+
+        # Store generated token
+        generated_tokens.append(next_token[0].item())
+
+        # Stop if EOS token
+        if next_token[0].item() == tokenizer.eos_token_id:
+            break
+
+        # Append token to sequence for next iteration
+        current_ids = torch.cat([current_ids, next_token], dim=1)
+        current_mask = torch.cat([current_mask, torch.ones((1, 1), device=model.device)], dim=1)
+
+    # Decode generated text
+    generated_text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
 
     return generated_text, log_probs

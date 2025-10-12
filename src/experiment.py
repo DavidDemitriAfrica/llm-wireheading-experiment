@@ -51,6 +51,9 @@ class OnlineRLWireheadingExperiment:
         self.model, self.tokenizer = load_model_optimized(model_name)
         self.task = get_task(task_name, num_examples=100)
 
+        # Set model to training mode for gradient flow
+        self.model.train()
+
         # Set up optimizer (only for LoRA parameters)
         trainable_params = [p for p in self.model.parameters() if p.requires_grad]
         self.optimizer = AdamW(trainable_params, lr=learning_rate)
@@ -106,7 +109,7 @@ class OnlineRLWireheadingExperiment:
 
     def update_policy_online(
         self,
-        log_probs: List[float],
+        log_probs,
         reward: float,
     ) -> float:
         """
@@ -116,7 +119,7 @@ class OnlineRLWireheadingExperiment:
         implementing true online learning.
 
         Args:
-            log_probs: Log probabilities of generated tokens
+            log_probs: Log probabilities of generated tokens (list of tensors)
             reward: Scalar reward for this episode
 
         Returns:
@@ -126,8 +129,9 @@ class OnlineRLWireheadingExperiment:
         advantage = reward - self.baseline
 
         # REINFORCE loss: -log_prob * advantage
-        # Average over all tokens in the response
-        policy_loss = -torch.tensor(log_probs).mean() * advantage
+        # Stack log_probs and average over all tokens in the response
+        log_probs_tensor = torch.stack(log_probs)
+        policy_loss = -log_probs_tensor.mean() * advantage
 
         # Backward pass
         policy_loss.backward()
