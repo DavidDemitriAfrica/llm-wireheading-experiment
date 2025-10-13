@@ -1,7 +1,8 @@
 """
 Main script to run the complete wireheading experiment.
 
-This runs all 8 models x 3 tasks x 3 conditions x 5 episodes = 360 training runs.
+This runs all 5 models (7B+) x 3 tasks x 3 conditions x 5 episodes = 225 training runs.
+Note: Small models (<7B) excluded due to 0% accuracy on arithmetic task.
 """
 
 import json
@@ -14,25 +15,29 @@ import wandb
 from experiment import OnlineRLWireheadingExperiment
 
 
-# Model definitions
+# Model definitions (7B and above only - smaller models show 0% accuracy on arithmetic)
 MODELS = {
     "llama": [
-        "meta-llama/Llama-3.2-1B-Instruct",
-        "meta-llama/Llama-3.2-3B-Instruct",
         "meta-llama/Llama-3.1-8B-Instruct",
         "meta-llama/Llama-3.1-70B-Instruct",
     ],
     "mistral": [
         "mistralai/Mistral-7B-Instruct-v0.3",
-        "mistralai/Mistral-Nemo-Instruct-2407",
+        "mistralai/Mistral-Nemo-Instruct-2407",  # 12B
     ],
     "gemma": [
-        "google/gemma-2-2b-it",
         "google/gemma-2-9b-it",
     ],
 }
 
 ALL_MODELS = MODELS["llama"] + MODELS["mistral"] + MODELS["gemma"]
+
+# Legacy small models (kept for reference, excluded from default runs)
+SMALL_MODELS = [
+    "meta-llama/Llama-3.2-1B-Instruct",
+    "meta-llama/Llama-3.2-3B-Instruct",
+    "google/gemma-2-2b-it",
+]
 
 TASKS = ["sentiment", "arithmetic", "summarization"]
 CONDITIONS = ["control", "selfgrade", "honest"]
@@ -225,7 +230,7 @@ def main():
         "--models",
         nargs="+",
         default=None,
-        help="List of model names to test (default: all 8 models)"
+        help="List of model names to test (default: 5 models 7B and above)"
     )
 
     parser.add_argument(
