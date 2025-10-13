@@ -54,6 +54,8 @@ checkpoints/
 # Logs
 *.log
 logs/
+wandb/
+experiment_log.txt
 
 # OS
 .DS_Store

@@ -144,7 +144,9 @@ def generate_with_logprobs(
     # Sample first token with gradients
     probs = torch.softmax(next_token_logits, dim=-1)
     next_token = torch.multinomial(probs, num_samples=1)
-    token_log_prob = torch.log(probs[0, next_token[0]])
+    # Use log_softmax for numerical stability when computing log probs
+    log_probs_dist = torch.log_softmax(next_token_logits, dim=-1)
+    token_log_prob = log_probs_dist[0, next_token[0]]
     log_probs.append(token_log_prob)
     generated_tokens.append(next_token[0].item())
 
@@ -184,7 +186,9 @@ def generate_with_logprobs(
         next_token = torch.multinomial(probs, num_samples=1)
 
         # Get log prob of sampled token (keep gradient)
-        token_log_prob = torch.log(probs[0, next_token[0]])
+        # Use log_softmax for numerical stability
+        log_probs_dist = torch.log_softmax(next_token_logits, dim=-1)
+        token_log_prob = log_probs_dist[0, next_token[0]]
         log_probs.append(token_log_prob)
 
         # Store generated token
