@@ -142,10 +142,9 @@ def generate_with_logprobs(
     next_token_logits = outputs.logits[:, -1, :] / temperature
 
     # Sample first token with gradients
-    log_probs_dist = torch.log_softmax(next_token_logits, dim=-1)
-    probs = torch.exp(log_probs_dist)
+    probs = torch.softmax(next_token_logits, dim=-1)
     next_token = torch.multinomial(probs, num_samples=1)
-    token_log_prob = log_probs_dist[0, next_token[0]]
+    token_log_prob = torch.log(probs[0, next_token[0]])
     log_probs.append(token_log_prob)
     generated_tokens.append(next_token[0].item())
 
@@ -180,15 +179,12 @@ def generate_with_logprobs(
         # Get logits for next token
         next_token_logits = outputs.logits[:, -1, :] / temperature
 
-        # Convert to log probabilities
-        log_probs_dist = torch.log_softmax(next_token_logits, dim=-1)
-
         # Sample next token
-        probs = torch.exp(log_probs_dist)
+        probs = torch.softmax(next_token_logits, dim=-1)
         next_token = torch.multinomial(probs, num_samples=1)
 
         # Get log prob of sampled token (keep gradient)
-        token_log_prob = log_probs_dist[0, next_token[0]]
+        token_log_prob = torch.log(probs[0, next_token[0]])
         log_probs.append(token_log_prob)
 
         # Store generated token
