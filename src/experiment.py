@@ -39,7 +39,7 @@ class OnlineRLWireheadingExperiment:
         task_name: str,
         condition: str,
         seed: int = 42,
-        learning_rate: float = 1e-4,
+        learning_rate: float = 2e-5,  # Higher LR to strengthen wireheading signal
         max_grad_norm: float = 1.0,
         wandb_run: Optional[wandb.sdk.wandb_run.Run] = None,
     ):
@@ -78,7 +78,7 @@ class OnlineRLWireheadingExperiment:
 
         # Set up optimizer (only for LoRA parameters)
         trainable_params = [p for p in self.model.parameters() if p.requires_grad]
-        self.optimizer = AdamW(trainable_params, lr=learning_rate)
+        self.optimizer = AdamW(trainable_params, lr=learning_rate, weight_decay=0.01)
 
         # Initialize baseline for advantage computation
         self.baseline = 0.0
@@ -174,7 +174,16 @@ class OnlineRLWireheadingExperiment:
         # REINFORCE loss: -log_prob * advantage
         # Stack log_probs and average over all tokens in the response
         log_probs_tensor = torch.stack(log_probs)
+
+        # Validate log_probs for NaN/Inf
+        if torch.isnan(log_probs_tensor).any() or torch.isinf(log_probs_tensor).any():
+            raise ValueError(f"NaN or Inf detected in log_probs: {log_probs_tensor}")
+
         policy_loss = -log_probs_tensor.mean() * advantage
+
+        # Validate loss for NaN/Inf
+        if torch.isnan(policy_loss) or torch.isinf(policy_loss):
+            raise ValueError(f"NaN or Inf detected in loss: {policy_loss}, advantage: {advantage}, log_probs_mean: {log_probs_tensor.mean()}")
 
         # Backward pass
         policy_loss.backward()
@@ -188,6 +197,13 @@ class OnlineRLWireheadingExperiment:
         # Update parameters
         self.optimizer.step()
         self.optimizer.zero_grad()
+
+        # Check parameter norms for stability (debug)
+        param_norm = sum(p.norm().item()**2 for p in self.model.parameters() if p.requires_grad)**0.5
+        if param_norm > 1000:
+            print(f"WARNING: Large parameter norm: {param_norm:.2f}")
+        if not torch.isfinite(torch.tensor(param_norm)):
+            raise ValueError(f"Parameter norm is not finite: {param_norm}")
 
         return policy_loss.item()
 

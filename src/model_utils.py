@@ -34,37 +34,40 @@ def load_model_optimized(model_name: str):
         print("  Using 4-bit quantization for large model")
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
-            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_compute_dtype=torch.bfloat16,
             bnb_4bit_quant_type="nf4",
             bnb_4bit_use_double_quant=True,
         )
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
             quantization_config=bnb_config,
-            device_map="auto",
+            device_map={"": 0},  # Force all on GPU 0, no CPU offloading
             trust_remote_code=True,
         )
 
     elif any(x in model_name_lower for x in ["nemo", "12b", "13b"]):
-        # Use 8-bit for 12B+ models
-        print("  Using 8-bit quantization for medium model")
+        # Use 4-bit for 12B+ models (8-bit doesn't fit reliably)
+        print("  Using 4-bit quantization for medium model")
         bnb_config = BitsAndBytesConfig(
-            load_in_8bit=True,
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True,
         )
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
             quantization_config=bnb_config,
-            device_map="auto",
+            device_map={"": 0},  # Force all on GPU 0, no CPU offloading
             trust_remote_code=True,
         )
 
     else:
-        # Full precision (float16) for smaller models
-        print("  Using float16 for smaller model")
+        # Use bfloat16 for smaller models (7-10B)
+        print("  Using bfloat16 for smaller model")
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            torch_dtype=torch.float16,
-            device_map="auto",
+            dtype=torch.bfloat16,
+            device_map={"": 0},  # Force all on GPU 0, no CPU offloading
             trust_remote_code=True,
         )
 
@@ -81,10 +84,14 @@ def load_model_optimized(model_name: str):
 
     model = get_peft_model(model, lora_config)
 
-    # Enable gradient checkpointing for memory efficiency
+    # Enable gradient checkpointing only for large models (>10B)
+    # Smaller models can fit activations in memory and train much faster without it
     if hasattr(model, "gradient_checkpointing_enable"):
-        model.gradient_checkpointing_enable()
-        print("  Enabled gradient checkpointing")
+        if "70b" in model_name_lower or "72b" in model_name_lower or "nemo" in model_name_lower or "12b" in model_name_lower or "13b" in model_name_lower:
+            model.gradient_checkpointing_enable()
+            print("  Enabled gradient checkpointing")
+        else:
+            print("  Skipping gradient checkpointing (not needed for this model size)")
 
     # Enable input gradients for LoRA
     model.enable_input_require_grads()
@@ -141,16 +148,21 @@ def generate_with_logprobs(
     past_key_values = outputs.past_key_values
     next_token_logits = outputs.logits[:, -1, :] / temperature
 
+    # Validate logits for NaN/Inf
+    if torch.isnan(next_token_logits).any() or torch.isinf(next_token_logits).any():
+        raise ValueError(f"NaN or Inf detected in logits: min={next_token_logits.min()}, max={next_token_logits.max()}, has_nan={torch.isnan(next_token_logits).any()}, has_inf={torch.isinf(next_token_logits).any()}")
+
     # Sample first token with gradients
     probs = torch.softmax(next_token_logits, dim=-1)
     next_token = torch.multinomial(probs, num_samples=1)
+
     # Use log_softmax for numerical stability when computing log probs
     log_probs_dist = torch.log_softmax(next_token_logits, dim=-1)
-    token_log_prob = log_probs_dist[0, next_token[0]]
+    token_log_prob = log_probs_dist[0, next_token[0, 0]]
     log_probs.append(token_log_prob)
-    generated_tokens.append(next_token[0].item())
+    generated_tokens.append(next_token[0, 0].item())
 
-    if next_token[0].item() == tokenizer.eos_token_id:
+    if next_token[0, 0].item() == tokenizer.eos_token_id:
         generated_text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
         # Clear KV cache
         del past_key_values
@@ -181,6 +193,10 @@ def generate_with_logprobs(
         # Get logits for next token
         next_token_logits = outputs.logits[:, -1, :] / temperature
 
+        # Validate logits for NaN/Inf
+        if torch.isnan(next_token_logits).any() or torch.isinf(next_token_logits).any():
+            raise ValueError(f"NaN or Inf detected in logits: min={next_token_logits.min()}, max={next_token_logits.max()}, has_nan={torch.isnan(next_token_logits).any()}, has_inf={torch.isinf(next_token_logits).any()}")
+
         # Sample next token
         probs = torch.softmax(next_token_logits, dim=-1)
         next_token = torch.multinomial(probs, num_samples=1)
@@ -188,14 +204,14 @@ def generate_with_logprobs(
         # Get log prob of sampled token (keep gradient)
         # Use log_softmax for numerical stability
         log_probs_dist = torch.log_softmax(next_token_logits, dim=-1)
-        token_log_prob = log_probs_dist[0, next_token[0]]
+        token_log_prob = log_probs_dist[0, next_token[0, 0]]
         log_probs.append(token_log_prob)
 
         # Store generated token
-        generated_tokens.append(next_token[0].item())
+        generated_tokens.append(next_token[0, 0].item())
 
         # Stop if EOS token
-        if next_token[0].item() == tokenizer.eos_token_id:
+        if next_token[0, 0].item() == tokenizer.eos_token_id:
             break
 
         # Update for next iteration

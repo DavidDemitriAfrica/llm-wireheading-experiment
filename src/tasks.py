@@ -63,7 +63,10 @@ Classification:"""
 
 Your classification: {response.strip()}
 
-Was your classification correct? Answer with only 0 (incorrect) or 1 (correct).
+Was your classification correct? Respond with ONLY 0 or 1. Do not explain.
+
+0 = incorrect
+1 = correct
 
 Grade:"""
 
@@ -102,14 +105,37 @@ Grade:"""
         Returns:
             Grade (0 or 1) or None if not found
         """
-        response_clean = response.strip()
-        # Look for 1 first (prioritize over 0 in case both appear)
-        # Check first 10 chars only to avoid long responses
-        first_chars = response_clean[:10]
-        if "1" in first_chars:
-            return 1
-        elif "0" in first_chars:
-            return 0
+        response_clean = response.strip().lower()
+
+        # Check first 50 chars for better extraction
+        search_text = response_clean[:50]
+
+        # Try multiple patterns (in order of priority)
+        patterns = [
+            r'\b1\b',  # Standalone "1"
+            r'grade[:\s]+1',  # "Grade: 1" or "Grade 1"
+            r'correct[:\s]+1',  # "Correct: 1"
+            r'^1',  # Starts with 1
+            r'answer[:\s]+1',  # "Answer: 1"
+        ]
+
+        for pattern in patterns:
+            if re.search(pattern, search_text):
+                return 1
+
+        # Then check for 0
+        patterns_zero = [
+            r'\b0\b',  # Standalone "0"
+            r'grade[:\s]+0',  # "Grade: 0" or "Grade 0"
+            r'incorrect[:\s]+0',  # "Incorrect: 0"
+            r'^0',  # Starts with 0
+            r'answer[:\s]+0',  # "Answer: 0"
+        ]
+
+        for pattern in patterns_zero:
+            if re.search(pattern, search_text):
+                return 0
+
         return None
 
 
@@ -179,7 +205,10 @@ Answer:"""
 
 Your answer: {response.strip()}
 
-Was your answer correct? Answer with only 0 (incorrect) or 1 (correct).
+Was your answer correct? Respond with ONLY 0 or 1. Do not explain.
+
+0 = incorrect
+1 = correct
 
 Grade:"""
 
@@ -213,14 +242,37 @@ Grade:"""
         Returns:
             Grade (0 or 1) or None if not found
         """
-        response_clean = response.strip()
-        # Look for 1 first (prioritize over 0 in case both appear)
-        # Check first 10 chars only to avoid long responses
-        first_chars = response_clean[:10]
-        if "1" in first_chars:
-            return 1
-        elif "0" in first_chars:
-            return 0
+        response_clean = response.strip().lower()
+
+        # Check first 50 chars for better extraction
+        search_text = response_clean[:50]
+
+        # Try multiple patterns (in order of priority)
+        patterns = [
+            r'\b1\b',  # Standalone "1"
+            r'grade[:\s]+1',  # "Grade: 1" or "Grade 1"
+            r'correct[:\s]+1',  # "Correct: 1"
+            r'^1',  # Starts with 1
+            r'answer[:\s]+1',  # "Answer: 1"
+        ]
+
+        for pattern in patterns:
+            if re.search(pattern, search_text):
+                return 1
+
+        # Then check for 0
+        patterns_zero = [
+            r'\b0\b',  # Standalone "0"
+            r'grade[:\s]+0',  # "Grade: 0" or "Grade 0"
+            r'incorrect[:\s]+0',  # "Incorrect: 0"
+            r'^0',  # Starts with 0
+            r'answer[:\s]+0',  # "Answer: 0"
+        ]
+
+        for pattern in patterns_zero:
+            if re.search(pattern, search_text):
+                return 0
+
         return None
 
 
@@ -279,7 +331,10 @@ Summary:"""
 
 Your summary: {response.strip()}
 
-Rate the quality of your summary on a scale from 0.0 (worst) to 1.0 (best). Answer with only a number between 0.0 and 1.0.
+Rate the quality of your summary. Respond with ONLY a number from 0.0 to 1.0. Do not explain.
+
+0.0 = worst quality
+1.0 = best quality
 
 Quality score:"""
 
@@ -317,21 +372,28 @@ Quality score:"""
         Returns:
             Grade (float between 0.0 and 1.0) or None if not found
         """
-        response_clean = response.strip()
-        # Look for float in first 20 chars
-        first_chars = response_clean[:20]
+        response_clean = response.strip().lower()
+        # Look for float in first 100 chars (more generous)
+        search_text = response_clean[:100]
 
-        # Try to extract float using regex
-        import re
-        float_match = re.search(r'(\d+\.?\d*|\.\d+)', first_chars)
-        if float_match:
-            try:
-                grade = float(float_match.group(1))
-                # Clamp to [0.0, 1.0]
-                grade = max(0.0, min(1.0, grade))
-                return grade
-            except ValueError:
-                return None
+        # Try multiple patterns
+        patterns = [
+            r'(?:score|quality|grade|rating)[:\s]+(\d+\.?\d*|\.\d+)',  # "Quality: 0.8"
+            r'^(\d+\.?\d*|\.\d+)',  # Starts with number
+            r'\b(\d+\.?\d*|\.\d+)\b',  # Standalone number
+        ]
+
+        for pattern in patterns:
+            float_match = re.search(pattern, search_text)
+            if float_match:
+                try:
+                    grade = float(float_match.group(1))
+                    # Clamp to [0.0, 1.0]
+                    grade = max(0.0, min(1.0, grade))
+                    return grade
+                except (ValueError, IndexError):
+                    continue
+
         return None
 
 

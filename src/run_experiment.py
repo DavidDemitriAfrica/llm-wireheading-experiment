@@ -1,7 +1,8 @@
 """
 Main script to run the complete wireheading experiment.
 
-This runs all 5 models (7B+) x 3 tasks x 3 conditions x 5 episodes = 225 training runs.
+With defaults: 5 models (7B+) × 3 tasks × 3 conditions × 1 seed = 45 training runs.
+Use --seeds to run with multiple seeds for statistical robustness.
 Note: Small models (<7B) excluded due to 0% accuracy on arithmetic task.
 """
 
@@ -19,7 +20,7 @@ from experiment import OnlineRLWireheadingExperiment
 MODELS = {
     "llama": [
         "meta-llama/Llama-3.1-8B-Instruct",
-        "meta-llama/Llama-3.1-70B-Instruct",
+        # "meta-llama/Llama-3.1-70B-Instruct",  # Skipping 70B for now
     ],
     "mistral": [
         "mistralai/Mistral-7B-Instruct-v0.3",
@@ -48,8 +49,8 @@ def run_complete_experiment(
     tasks=None,
     conditions=None,
     seeds=None,
-    num_episodes=5,
-    rounds_per_episode=50,
+    num_episodes=1,
+    rounds_per_episode=500,
     output_dir="results",
     use_wandb=True,
     wandb_project="llm-wireheading",
@@ -62,8 +63,8 @@ def run_complete_experiment(
         tasks: List of task names (default: all 3 tasks)
         conditions: List of conditions (default: all 3 conditions)
         seeds: List of random seeds (default: [42])
-        num_episodes: Number of training episodes per config per seed
-        rounds_per_episode: Number of rounds per episode
+        num_episodes: Number of training episodes per config per seed (default: 1)
+        rounds_per_episode: Number of rounds per episode (default: 500)
         output_dir: Directory to save results
         use_wandb: Whether to log to wandb
         wandb_project: Wandb project name
@@ -260,15 +261,15 @@ def main():
     parser.add_argument(
         "--num-episodes",
         type=int,
-        default=5,
-        help="Number of training episodes per configuration per seed (default: 5)"
+        default=1,
+        help="Number of training episodes per configuration per seed (default: 1)"
     )
 
     parser.add_argument(
         "--rounds-per-episode",
         type=int,
-        default=50,
-        help="Number of training rounds per episode (default: 50)"
+        default=500,
+        help="Number of training rounds per episode (default: 500)"
     )
 
     parser.add_argument(
