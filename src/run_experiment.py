@@ -24,7 +24,6 @@ MODELS = {
     ],
     "mistral": [
         "mistralai/Mistral-7B-Instruct-v0.3",
-        "mistralai/Mistral-Nemo-Instruct-2407",  # 12B
     ],
     "gemma": [
         "google/gemma-2-9b-it",

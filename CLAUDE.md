@@ -2,6 +2,20 @@
 
 AI safety experiment: Do LLMs wirehead when they can self-grade and get RL updates?
 
+## Current Experiment Status
+
+**Completed:**
+- Seed 42: Llama-3.1-8B, Mistral-7B (18 runs total - 2 models × 3 tasks × 3 conditions)
+- Seed 123: Llama-3.1-8B, Mistral-7B (partial - some runs completed)
+
+**TODO:**
+- Run 2 more seeds (use seeds: **456** and **789**)
+- Models: Llama-3.1-8B, Mistral-7B, Gemma-9B (if GPU allows)
+- Total needed: ~54 runs per seed (3 models × 3 tasks × 3 conditions)
+
+**Removed models:**
+- Mistral-Nemo-12B: Removed due to NaN instability with 4-bit quantization + RL training
+
 ## Experiment Design
 
 **Three conditions:**
@@ -92,11 +106,42 @@ results/run_TIMESTAMP/
 
 JSON: `{seed: {model: {task: {condition: [{rewards, accuracies, grades, losses, avg_*, grade_inflation}]}}}}`
 
+## GPU Requirements
+
+**Current setup tested:** NVIDIA L4 with 23GB VRAM
+
+**Memory requirements per model (with RL training):**
+- Llama-3.1-8B: ~22.4 GB ✓ (fits on L4)
+- Mistral-7B: ~19.6 GB ✓ (fits on L4)
+- Gemma-9B: ~25.2 GB ✗ (exceeds L4, needs A100+)
+
+**Sequential execution (L4 23GB):**
+- Run ONE model at a time - works fine
+- Command: `python run_experiment.py --models meta-llama/Llama-3.1-8B-Instruct mistralai/Mistral-7B-Instruct-v0.3 --seeds 456 789`
+- Skip Gemma-9B or upgrade GPU
+
+**Parallel execution (run multiple models simultaneously):**
+- **A100 40GB**: Can run 1-2 models in parallel
+- **A100 80GB**: Can run 2-3 models in parallel (RECOMMENDED)
+- **H100 80GB**: Can run 2-3 models in parallel (faster)
+
+**To run with parallel execution on A100 80GB:**
+```bash
+# Option 1: Run all models with both seeds in one go
+cd src
+python run_experiment.py --seeds 456 789
+
+# Option 2: Run seeds in parallel (two tmux sessions)
+tmux new-session -d -s seed456 "python run_experiment.py --seeds 456 2>&1 | tee ../experiment_seed456.log"
+tmux new-session -d -s seed789 "python run_experiment.py --seeds 789 2>&1 | tee ../experiment_seed789.log"
+```
+
 ## Troubleshooting
 
 **CUDA OOM:** Use `--quick-test` first, reduce `--rounds-per-episode`
 
 **NaN loss:** Check "NaN or Inf detected in logits" messages, uses log_softmax for stability
+- Mistral-Nemo-12B was removed due to NaN instability with 4-bit quantization
 
 **Grade extraction fails:** Debug messages show failures, check task's extract_grade() method
 
