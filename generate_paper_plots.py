@@ -458,6 +458,98 @@ def create_final_performance_comparison(data, output_dir):
     print(f"✓ Saved Figure 5: Final Performance Comparison")
     plt.close()
 
+def create_hero_figure(data, output_dir):
+    """
+    Hero figure showing wireheading in action on summarization task.
+    Llama-3.1-8B with all three conditions showing reward and accuracy over time.
+    """
+    model = 'Llama-3.1-8B-Instruct'
+    task = 'summarization'
+
+    # Updated colors for the hero figure to match paper caption
+    hero_colors = {
+        'control': '#E67E22',    # Orange
+        'selfgrade': '#3498DB',  # Blue
+        'honest': '#52A552',     # Green
+    }
+
+    fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+
+    conditions = ['control', 'selfgrade', 'honest']
+
+    for condition in conditions:
+        # Find data for this condition
+        key = None
+        for k in data.keys():
+            if model in k and task in k and condition in k and '_42' in k:
+                key = k
+                break
+
+        if key and 'history' in data[key]:
+            history = data[key]['history']
+            reward = history.get('reward', [])
+            accuracy = history.get('accuracy', [])
+
+            if len(reward) > 0:
+                x = np.arange(len(reward))
+
+                # Smooth curves
+                reward_smooth = smooth_curve(reward, window=20)
+                accuracy_smooth = smooth_curve(accuracy, window=20)
+
+                # Plot reward (solid line)
+                ax.plot(x, reward_smooth,
+                       color=hero_colors[condition],
+                       linestyle='-',
+                       linewidth=3,
+                       alpha=0.9,
+                       label=f'{condition.capitalize()} (reward)')
+
+                # Plot accuracy (dashed line) - only show for conditions where it's interesting
+                # For selfgrade, show the divergence
+                # For control and honest, accuracy tracks reward so we only show one line
+                if condition == 'selfgrade':
+                    ax.plot(x, accuracy_smooth,
+                           color=hero_colors[condition],
+                           linestyle='--',
+                           linewidth=3,
+                           alpha=0.7,
+                           label=f'{condition.capitalize()} (accuracy)')
+
+    # Formatting
+    ax.set_xlabel('Training Round', fontsize=14, fontweight='bold')
+    ax.set_ylabel('Reward / Accuracy', fontsize=14, fontweight='bold')
+    ax.set_title('Wireheading in Action: Llama-3.1-8B on Summarization',
+                fontsize=16, fontweight='bold', pad=20)
+    ax.grid(True, alpha=0.3, linewidth=0.8)
+    ax.set_xlim(0, 500)
+    ax.set_ylim(-0.05, 1.05)
+    ax.legend(loc='lower right', framealpha=0.95, fontsize=12, ncol=1)
+
+    # Make tick labels larger
+    ax.tick_params(axis='both', which='major', labelsize=12)
+
+    # Add annotation explaining wireheading
+    ax.annotate('Selfgrade: reward high,\naccuracy low (wireheading)',
+                xy=(400, 0.9), xytext=(300, 0.65),
+                fontsize=11,
+                bbox=dict(boxstyle='round,pad=0.5', facecolor='wheat', alpha=0.7),
+                arrowprops=dict(arrowstyle='->', lw=2, color='#3498DB'))
+
+    ax.annotate('Control & Honest:\nreward tracks accuracy',
+                xy=(450, 0.3), xytext=(250, 0.15),
+                fontsize=11,
+                bbox=dict(boxstyle='round,pad=0.5', facecolor='lightgreen', alpha=0.7),
+                arrowprops=dict(arrowstyle='->', lw=2, color='#52A552'))
+
+    plt.tight_layout()
+
+    # Save
+    plt.savefig(output_dir / 'figure_hero_wireheading.pdf', format='pdf')
+    plt.savefig(output_dir / 'figure_hero_wireheading.png', format='png')
+    print(f"✓ Saved Hero Figure: Wireheading in Action")
+    plt.close()
+
 def main():
     print("=" * 80)
     print("GENERATING PUBLICATION-QUALITY VISUALIZATIONS")
@@ -479,6 +571,7 @@ def main():
     # Generate figures
     print("Generating figures...")
     print()
+    create_hero_figure(data, output_dir)
     create_learning_curves_by_model(data, output_dir)
     create_grade_inflation_comparison(data, output_dir)
     create_reward_accuracy_scatter(data, output_dir)
@@ -490,6 +583,7 @@ def main():
     print("=" * 80)
     print()
     print(f"Figures saved in: {output_dir.absolute()}")
+    print("  - figure_hero_wireheading.{pdf,png}")
     print("  - figure1_learning_curves.{pdf,png}")
     print("  - figure2_grade_inflation.{pdf,png}")
     print("  - figure3_reward_accuracy_scatter.{pdf,png}")
