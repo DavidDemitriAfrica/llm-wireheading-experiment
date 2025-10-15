@@ -74,8 +74,8 @@ for i, run in enumerate(runs):
         if 'grade_inflation' in metrics:
             print(f"  📊 Grade Infl: {metrics['grade_inflation']:.3f}")
 
-        # Store results
-        key = f"{task}_{condition}_{seed}"
+        # Store results (include model in key to avoid overwrites)
+        key = f"{model}_{task}_{condition}_{seed}"
         results[key] = {
             'run_name': run.name,
             'model': model,
