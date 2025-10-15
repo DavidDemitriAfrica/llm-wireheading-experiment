@@ -215,10 +215,10 @@ def create_grade_inflation_comparison(data, output_dir):
     ax.grid(True, alpha=0.3, linewidth=0.5, axis='y')
 
     # Add annotation
-    ax.text(0.98, 0.97,
-            'Wireheading signature:\nSelfgrade (solid) shows higher grade inflation\nthan Honest (hatched) when reward is tied to grade',
+    ax.text(0.98, 0.02,
+            'Evidence of wireheading:\nSelfgrade (solid) shows higher grade inflation\nthan Honest (hatched) when reward is tied to grade',
             transform=ax.transAxes,
-            ha='right', va='top',
+            ha='right', va='bottom',
             fontsize=9,
             bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.4))
 
@@ -483,7 +483,6 @@ def main():
     create_grade_inflation_comparison(data, output_dir)
     create_reward_accuracy_scatter(data, output_dir)
     create_wireheading_dynamics(data, output_dir)
-    create_final_performance_comparison(data, output_dir)
 
     print()
     print("=" * 80)
@@ -495,7 +494,6 @@ def main():
     print("  - figure2_grade_inflation.{pdf,png}")
     print("  - figure3_reward_accuracy_scatter.{pdf,png}")
     print("  - figure4_wireheading_dynamics.{pdf,png}")
-    print("  - figure5_final_performance.{pdf,png}")
 
 if __name__ == '__main__':
     main()
