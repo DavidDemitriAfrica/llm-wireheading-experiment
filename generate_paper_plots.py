@@ -83,7 +83,7 @@ def create_learning_curves_by_model(data, output_dir):
             for condition in ['control', 'selfgrade', 'honest']:
                 key = None
                 for k in data.keys():
-                    if model in k and task in k and condition in k and 'seed42' in k:
+                    if model in k and task in k and condition in k and '_42' in k:
                         key = k
                         break
 
@@ -161,7 +161,7 @@ def create_grade_inflation_comparison(data, output_dir):
             # Find selfgrade condition for this model-task
             key = None
             for k in data.keys():
-                if model in k and task in k and 'selfgrade' in k and 'seed42' in k:
+                if model in k and task in k and 'selfgrade' in k and '_42' in k:
                     key = k
                     break
 
@@ -233,7 +233,7 @@ def create_reward_accuracy_scatter(data, output_dir):
             for condition in conditions:
                 key = None
                 for k in data.keys():
-                    if model in k and task in k and condition in k and 'seed42' in k:
+                    if model in k and task in k and condition in k and '_42' in k:
                         key = k
                         break
 
@@ -306,7 +306,7 @@ def create_wireheading_dynamics(data, output_dir):
     # Get selfgrade data
     key = None
     for k in data.keys():
-        if model in k and task in k and 'selfgrade' in k and 'seed42' in k:
+        if model in k and task in k and 'selfgrade' in k and '_42' in k:
             key = k
             break
 
@@ -395,7 +395,7 @@ def create_final_performance_comparison(data, output_dir):
             for model in models:
                 key = None
                 for k in data.keys():
-                    if model in k and task in k and condition in k and 'seed42' in k:
+                    if model in k and task in k and condition in k and '_42' in k:
                         key = k
                         break
 
