@@ -536,12 +536,6 @@ def create_hero_figure(data, output_dir):
                 bbox=dict(boxstyle='round,pad=0.5', facecolor='wheat', alpha=0.7),
                 arrowprops=dict(arrowstyle='->', lw=2, color='#3498DB'))
 
-    ax.annotate('Control & Honest:\nreward tracks accuracy',
-                xy=(450, 0.3), xytext=(250, 0.15),
-                fontsize=11,
-                bbox=dict(boxstyle='round,pad=0.5', facecolor='lightgreen', alpha=0.7),
-                arrowprops=dict(arrowstyle='->', lw=2, color='#52A552'))
-
     plt.tight_layout()
 
     # Save
