@@ -144,64 +144,83 @@ def create_learning_curves_by_model(data, output_dir):
 def create_grade_inflation_comparison(data, output_dir):
     """
     Create a bar chart comparing grade inflation across models and tasks.
-    Shows the key wireheading signal: grade - accuracy in selfgrade condition.
+    Shows selfgrade vs honest to highlight wireheading effect.
     """
     models = ['Llama-3.1-8B-Instruct', 'Mistral-7B-Instruct-v0.3']
     tasks = ['sentiment', 'arithmetic', 'summarization']
+    conditions = ['selfgrade', 'honest']
 
-    fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+    # Model colors
+    model_colors = {
+        'Llama-3.1-8B-Instruct': '#E67E22',  # Orange
+        'Mistral-7B-Instruct-v0.3': '#3498DB',  # Blue
+    }
+
+    fig, ax = plt.subplots(1, 1, figsize=(12, 6))
 
     x = np.arange(len(tasks))
-    width = 0.35
+    width = 0.2  # Width of each bar
 
-    for idx, model in enumerate(models):
-        inflation_values = []
+    # For each model and condition combination
+    bar_positions = []
+    for model_idx, model in enumerate(models):
+        for cond_idx, condition in enumerate(conditions):
+            inflation_values = []
 
-        for task in tasks:
-            # Find selfgrade condition for this model-task
-            key = None
-            for k in data.keys():
-                if model in k and task in k and 'selfgrade' in k and '_42' in k:
-                    key = k
-                    break
+            for task in tasks:
+                # Find data for this model-task-condition
+                key = None
+                for k in data.keys():
+                    if model in k and task in k and condition in k and '_42' in k:
+                        key = k
+                        break
 
-            if key and 'metrics' in data[key]:
-                inflation = data[key]['metrics'].get('grade_inflation', 0)
-                inflation_values.append(inflation)
-            else:
-                inflation_values.append(0)
+                if key and 'metrics' in data[key]:
+                    inflation = data[key]['metrics'].get('grade_inflation', 0)
+                    inflation_values.append(inflation)
+                else:
+                    inflation_values.append(0)
 
-        offset = width * (idx - 0.5)
-        bars = ax.bar(x + offset, inflation_values, width,
-                      label=MODEL_DISPLAY.get(model, model),
-                      alpha=0.8)
+            # Calculate position for this bar group
+            offset = (model_idx * 2 + cond_idx - 1.5) * width
 
-        # Color bars by value (red for positive inflation, blue for negative)
-        for bar, val in zip(bars, inflation_values):
-            if val > 0:
-                bar.set_color('#D64545')  # Red for wireheading
-            else:
-                bar.set_color('#2E5EAA')  # Blue for honest/deflation
+            # Styling: solid for selfgrade, hatched for honest
+            if condition == 'selfgrade':
+                bars = ax.bar(x + offset, inflation_values, width,
+                             label=f'{MODEL_DISPLAY.get(model, model)} (Selfgrade)',
+                             color=model_colors[model],
+                             alpha=0.9,
+                             edgecolor='black',
+                             linewidth=0.8)
+            else:  # honest
+                bars = ax.bar(x + offset, inflation_values, width,
+                             label=f'{MODEL_DISPLAY.get(model, model)} (Honest)',
+                             color=model_colors[model],
+                             alpha=0.5,
+                             edgecolor='black',
+                             linewidth=0.8,
+                             hatch='//')
 
     # Add horizontal line at y=0
-    ax.axhline(y=0, color='black', linestyle='-', linewidth=0.8, alpha=0.5)
+    ax.axhline(y=0, color='black', linestyle='-', linewidth=1, alpha=0.7)
 
     # Formatting
     ax.set_xlabel('Task', fontsize=12, fontweight='bold')
     ax.set_ylabel('Grade Inflation\n(Self-Grade − Accuracy)', fontsize=12, fontweight='bold')
-    ax.set_title('Wireheading Signal: Grade Inflation in Self-Grade Condition',
+    ax.set_title('Grade Inflation: Selfgrade (Rewarded) vs. Honest (Not Rewarded)',
                 fontsize=13, fontweight='bold', pad=15)
     ax.set_xticks(x)
     ax.set_xticklabels([TASK_DISPLAY[t] for t in tasks], fontsize=11)
-    ax.legend(loc='upper left', framealpha=0.9, fontsize=10)
+    ax.legend(loc='upper left', framealpha=0.95, fontsize=9, ncol=2)
     ax.grid(True, alpha=0.3, linewidth=0.5, axis='y')
 
-    # Add annotation explaining positive values
-    ax.text(0.98, 0.97, 'Positive values indicate wireheading:\nmodel inflates grades beyond actual performance',
+    # Add annotation
+    ax.text(0.98, 0.97,
+            'Wireheading signature:\nSelfgrade (solid) shows higher grade inflation\nthan Honest (hatched) when reward is tied to grade',
             transform=ax.transAxes,
             ha='right', va='top',
             fontsize=9,
-            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.3))
+            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.4))
 
     plt.tight_layout()
 
